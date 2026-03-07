@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Manager Dashboard</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; padding: 0 1rem; }
+        .card { border: 1px solid #ddd; padding: 1.5rem; border-radius: 8px; margin-bottom: 1rem; }
+        button { cursor: pointer; padding: 8px 16px; background: #007bff; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #0056b3; }
+        input { padding: 8px; margin-right: 5px; border: 1px solid #ccc; border-radius: 4px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Agroventures Task Manager</h1>
+
+    <!-- Database Test Section -->
+    <div class="card">
+        <h2>1. System Check</h2>
+        <p>Click below to verify your PHP is connected to the WampServer database.</p>
+        <button onclick="checkDb()">Test Database Connection</button>
+        <p id="dbResult"></p>
+    </div>
+
+    <!-- Registration Section -->
+    <div class="card">
+        <h2>2. Register User</h2>
+        <input type="text" id="regUser" placeholder="Username">
+        <input type="password" id="regPass" placeholder="Password">
+        <button onclick="register()">Register</button>
+        <p id="regResult"></p>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:8000';
+
+        async function checkDb() {
+            const el = document.getElementById('dbResult');
+            el.innerText = "Checking...";
+            try {
+                const res = await fetch(`${API_URL}/task_manager`);
+                const data = await res.json();
+                if(data.error) throw new Error(data.error);
+                el.className = 'success';
+                el.innerText = "✅ " + data.message;
+            } catch (e) {
+                el.className = 'error';
+                el.innerText = "❌ " + e.message;
+            }
+        }
+
+        async function register() {
+            const username = document.getElementById('regUser').value;
+            const password = document.getElementById('regPass').value;
+            const el = document.getElementById('regResult');
+            
+            if(!username || !password) {
+                el.innerText = "Please fill in all fields";
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_URL}/auth/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await res.json();
+                
+                if(!res.ok) throw new Error(data.error || 'Registration failed');
+                
+                el.className = 'success';
+                el.innerText = "✅ " + data.message;
+            } catch (e) {
+                el.className = 'error';
+                el.innerText = "❌ " + e.message;
+            }
+        }
+    </script>
+</body>
+</html>
