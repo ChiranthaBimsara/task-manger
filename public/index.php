@@ -1,37 +1,38 @@
 <?php
-// 1. Set Headers immediately
-header("Access-Control-Allow-Origin: *");
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Methods: GET,POST,PUT,DELETE,OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Access-Control-Allow-Headers, Authorization, X-Requested-With");
 
-// 2. Handle Preflight Requests
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+declare(strict_types=1);
+
+header('Content-Type: application/json');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
     exit;
 }
 
-// 3. Suppress HTML errors and handle Fatal Errors
-ini_set('display_errors', 0);
-register_shutdown_function(function() {
-    $error = error_get_last();
-    if ($error && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR])) {
-        http_response_code(500);
-        echo json_encode(["error" => "Fatal Error: " . $error['message']]);
-    }
-});
-
-// 4. Global Exception Handler
-set_exception_handler(function ($e) {
+set_error_handler(function ($severity, $message, $file, $line) {
     http_response_code(500);
-    echo json_encode(["error" => $e->getMessage()]);
+    echo json_encode([
+        'error' => "PHP Error: {$message} in {$file} on line {$line}"
+    ]);
     exit;
 });
 
-// 5. Check for Dependencies
+set_exception_handler(function ($e) {
+    http_response_code(500);
+    echo json_encode([
+        'error' => $e->getMessage()
+    ]);
+    exit;
+});
+
 if (!file_exists(__DIR__ . '/../vendor/autoload.php')) {
     http_response_code(500);
-    echo json_encode(["error" => "Vendor folder missing. Please run 'setup.bat' or 'composer install'."]);
+    echo json_encode([
+        'error' => "Vendor folder missing. Run composer install first."
+    ]);
     exit;
 }
 
@@ -40,51 +41,111 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use Dotenv\Dotenv;
 use App\Controllers\AuthController;
 use App\Controllers\TaskController;
+use App\Config\Database;
 
-try {
+if (file_exists(__DIR__ . '/../.env')) {
     $dotenv = Dotenv::createImmutable(__DIR__ . '/../');
     $dotenv->load();
-} catch (Exception $e) {
-    // .env might be missing, continue with defaults
 }
 
-$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
-$parts = explode('/', trim($uri, '/'));
+$method = $_SERVER['REQUEST_METHOD'];
+$requestUri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 
-// Basic Routing
-if ($parts[0] === 'auth') {
-    $auth = new AuthController();
-    if ($parts[1] === 'register' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $auth->register();
-    } elseif ($parts[1] === 'login' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $auth->login();
-    }
-} 
-elseif ($parts[0] === 'tasks') {
-    $taskController = new TaskController();
-    $id = $parts[1] ?? null;
-    $method = $_SERVER['REQUEST_METHOD'];
+// Remove base folder path if project is inside /task-manger/public
+$scriptName = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME']));
+$path = $requestUri;
 
-    switch ($method) {
-        case 'GET':
-            $taskController->index();
-            break;
-        case 'POST':
-            $taskController->store();
-            break;
-        case 'PUT':
-            if ($id) $taskController->update($id);
-            break;
-        case 'DELETE':
-            if ($id) $taskController->delete($id);
-            break;
-    }
-} elseif ($parts[0] === 'task_manager') {
+if ($scriptName !== '/' && strpos($path, $scriptName) === 0) {
+    $path = substr($path, strlen($scriptName));
+}
+
+$path = trim($path, '/');
+$parts = $path === '' ? [] : explode('/', $path);
+
+// Home/info endpoint
+if ($path === '' || $path === 'index.php') {
+    echo json_encode([
+        'message' => 'Task Manager API is running'
+    ]);
+    exit;
+}
+
+// Support requests routed as index.php/auth/login
+if (!empty($parts) && $parts[0] === 'index.php') {
+    array_shift($parts);
+}
+
+$resource = $parts[0] ?? '';
+$id = isset($parts[1]) ? (int) $parts[1] : null;
+
+// DB test route
+if ($resource === 'db-test') {
     try {
-        $db = \App\Config\Database::getConnection();
-        echo json_encode(["message" => "Database connected successfully!"]);
-    } catch (Exception $e) {
+        Database::getConnection();
+        echo json_encode(['message' => 'Database connected successfully']);
+    } catch (Throwable $e) {
         http_response_code(500);
-        echo json_encode(["error" => "Connection failed: " . $e->getMessage()]);
+        echo json_encode(['error' => $e->getMessage()]);
     }
+    exit;
 }
+
+if ($resource === 'auth') {
+    $auth = new AuthController();
+    $action = $parts[1] ?? '';
+
+    if ($action === 'register' && $method === 'POST') {
+        $auth->register();
+        exit;
+    }
+
+    if ($action === 'login' && $method === 'POST') {
+        $auth->login();
+        exit;
+    }
+
+    if ($action === 'logout' && $method === 'POST') {
+        $auth->logout();
+        exit;
+    }
+
+    http_response_code(404);
+    echo json_encode(['error' => 'Auth route not found']);
+    exit;
+}
+
+if ($resource === 'tasks') {
+    $taskController = new TaskController();
+
+    if ($method === 'GET' && $id === null) {
+        $taskController->index();
+        exit;
+    }
+
+    if ($method === 'GET' && $id !== null) {
+        $taskController->show($id);
+        exit;
+    }
+
+    if ($method === 'POST' && $id === null) {
+        $taskController->store();
+        exit;
+    }
+
+    if ($method === 'PUT' && $id !== null) {
+        $taskController->update($id);
+        exit;
+    }
+
+    if ($method === 'DELETE' && $id !== null) {
+        $taskController->delete($id);
+        exit;
+    }
+
+    http_response_code(404);
+    echo json_encode(['error' => 'Task route not found']);
+    exit;
+}
+
+http_response_code(404);
+echo json_encode(['error' => 'Route not found']);
