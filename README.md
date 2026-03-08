@@ -137,22 +137,12 @@ Create a MySQL database:
 task_manager
 ```
 
-Then import the SQL file:
-
-```
-database.sql
-```
-
 Example using MySQL:
 
 ```sql
 CREATE DATABASE task_manager;
 USE task_manager;
 ```
-
-Then run the SQL commands inside `database.sql`.
-
----
 
 # Running the Project Locally
 
