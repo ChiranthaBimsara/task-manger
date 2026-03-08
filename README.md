@@ -398,4 +398,4 @@ Include a short demo video showing:
 
 # License
 
-This project is for educational and demonstration purposes.
+This project is for educational and demonstration purposes...
