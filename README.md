@@ -370,22 +370,6 @@ DB_PASS=
 * Deleting a task performs a **soft delete** instead of permanently removing the record.
 * The frontend interacts with the backend API using **JavaScript Fetch requests**.
 
----
 
-# Demo Video
-
-Include a short demo video showing:
-
-1. Project running locally
-2. User registration
-3. User login
-4. Creating a task
-5. Updating task status
-6. Deleting a task
-7. Viewing tasks in the dashboard
-
----
-
-# License
 
 This project is for educational and demonstration purposes...
